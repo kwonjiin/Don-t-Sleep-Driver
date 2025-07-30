@@ -1,29 +1,40 @@
 import tkinter as tk
 from tkinter import messagebox
-from opencv import drowsiness_detection
-from threading import Thread
+from threading import Thread, Event
+from logger import summarize_session
+from detector import drowsiness_detection
 
-# 졸음 감지 시스템 시작
+stop_event = Event()  # 감지 종료를 위한 이벤트
+detection_thread = None
+
 def start_detection():
+    global detection_thread
+    stop_event.clear()  # 감지 시작 전 stop 이벤트 초기화
     start_button.config(state="disabled")
     stop_button.config(state="normal")
-    
-    # 별도의 쓰레드로 졸음 감지 시스템 실행
-    detection_thread = Thread(target=drowsiness_detection, args=(on_detection_end,))
+    detection_thread = Thread(
+        target=drowsiness_detection, 
+        args=(stop_event, on_detection_end)
+        )
     detection_thread.start()
 
-# 졸음 감지 종료 후 처리
-def on_detection_end():
+def stop_detection():
+    global detection_thread
+    stop_event.set()  # 감지 중단 요청
+    stop_button.config(state="disabled")  # 즉시 버튼 비활성화
+    if detection_thread and detection_thread.is_alive():
+        detection_thread.join(timeout=1)
+
+def on_detection_end(start_time, drowsy_count):
+    session_info = summarize_session(start_time, drowsy_count)
+    messagebox.showinfo("운전 세션 요약", session_info)
     start_button.config(state="normal")
     stop_button.config(state="disabled")
-    messagebox.showinfo("알림", "졸음 운전 감지 시스템이 종료되었습니다.")
 
-# GUI 설정
-def stop_detection():
-    # 종료 버튼 클릭 시 졸음 감지 시스템 종료
-    pass
+def on_close():
+    stop_detection()
+    root.destroy()
 
-# GUI 창
 root = tk.Tk()
 root.title("Don't Sleep Driver")
 root.geometry("400x300")
@@ -37,4 +48,5 @@ start_button.pack(pady=10)
 stop_button = tk.Button(root, text="종료", font=("Arial", 16), state="disabled", command=stop_detection)
 stop_button.pack(pady=10)
 
+root.protocol("WM_DELETE_WINDOW", on_close)
 root.mainloop()
